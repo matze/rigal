@@ -6,10 +6,12 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1"
+futures = "0"
 image = "0"
 indicatif = "0"
 serde = "1"
 serde_derive = "1"
 structopt = "0.3"
 toml = "0.5"
+tokio = { version = "0.2", features = ["full"] }
 walkdir = "2"
