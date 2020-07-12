@@ -2,37 +2,44 @@ use anyhow::{anyhow, Context, Result};
 use image::io::Reader;
 use image::imageops::{resize, FilterType};
 use indicatif::{ProgressBar, ProgressStyle};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use std::ffi::OsStr;
-use std::fs::{copy, create_dir_all, read_to_string};
+use std::fs::{copy, create_dir_all, read_to_string, write};
 use std::path::PathBuf;
 use std::collections::HashSet;
 use structopt::StructOpt;
 use walkdir::{DirEntry, WalkDir};
 
+static RIGAL_TOML: &str = "rigal.toml";
+
 #[derive(StructOpt)]
 #[structopt(name = "rigal", about = "Static photo gallery generator")]
-struct Options {
-    #[structopt(parse(from_os_str))]
-    input: PathBuf,
+enum Commands {
+    #[structopt(about = "Build static gallery")]
+    Build {
+        #[structopt(parse(from_os_str))]
+        input: PathBuf,
 
-    #[structopt(parse(from_os_str), default_value = "_build")]
-    output: PathBuf,
+        #[structopt(parse(from_os_str), default_value = "_build")]
+        output: PathBuf,
+    },
+    #[structopt(about = "Create new rigal.toml config")]
+    New,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct ThumbnailSize {
     width: u32,
     height: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Resize {
     width: u32,
     height: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct Config {
     thumbnail: ThumbnailSize,
     resize: Option<Resize>,
@@ -44,10 +51,23 @@ struct Conversion {
     to: PathBuf,
 }
 
-fn main() -> Result<()> {
-    let options = Options::from_args();
+fn create_config() -> Result<()> {
+    let config = Config {
+        thumbnail: ThumbnailSize {
+            width: 450,
+            height: 300,
+        },
+        resize: None,
+    };
 
-    let config: Config = toml::from_str(&read_to_string(PathBuf::from("rigal.toml"))
+    write(PathBuf::from(RIGAL_TOML), toml::to_string(&config)?)?;
+    println!("Wrote {}.", RIGAL_TOML);
+
+    Ok(())
+}
+
+fn build(input: PathBuf, output: PathBuf) -> Result<()> {
+    let config: Config = toml::from_str(&read_to_string(PathBuf::from(RIGAL_TOML))
         .context("Could not open `rigal.toml'.")?)
         .context("`rigal.toml' format seems broken.")?;
 
@@ -61,7 +81,7 @@ fn main() -> Result<()> {
             .next()
             .ok_or(anyhow!("Cannot process current directory"))?;
 
-        let path = options.output
+        let path = output
             .clone()
             .join(entry.path().strip_prefix(prefix)?);
 
@@ -78,7 +98,7 @@ fn main() -> Result<()> {
 
     // Find all images that are not directories, match a supported file extension and whose output
     // either does not exist or is older than the source.
-    let entries: Vec<_> = WalkDir::new(&options.input)
+    let entries: Vec<_> = WalkDir::new(&input)
         .follow_links(true)
         .into_iter()
         .filter_map(Result::ok)
@@ -121,6 +141,21 @@ fn main() -> Result<()> {
         }
 
         progress_bar.inc(1);
+    }
+
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    let commands = Commands::from_args();
+
+    match commands {
+        Commands::Build{ input, output } => {
+            build(input, output)?;
+        }
+        Commands::New => {
+            create_config()?;
+        }
     }
 
     Ok(())
