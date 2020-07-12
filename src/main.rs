@@ -16,13 +16,8 @@ static RIGAL_TOML: &str = "rigal.toml";
 #[structopt(name = "rigal", about = "Static photo gallery generator")]
 enum Commands {
     #[structopt(about = "Build static gallery")]
-    Build {
-        #[structopt(parse(from_os_str))]
-        input: PathBuf,
+    Build,
 
-        #[structopt(parse(from_os_str), default_value = "_build")]
-        output: PathBuf,
-    },
     #[structopt(about = "Create new rigal.toml config")]
     New,
 }
@@ -41,6 +36,8 @@ struct Resize {
 
 #[derive(Serialize, Deserialize)]
 struct Config {
+    input: PathBuf,
+    output: PathBuf,
     thumbnail: ThumbnailSize,
     resize: Option<Resize>,
 }
@@ -53,6 +50,8 @@ struct Conversion {
 
 fn create_config() -> Result<()> {
     let config = Config {
+        input: PathBuf::from("input"),
+        output: PathBuf::from("_build"),
         thumbnail: ThumbnailSize {
             width: 450,
             height: 300,
@@ -66,7 +65,7 @@ fn create_config() -> Result<()> {
     Ok(())
 }
 
-fn build(input: PathBuf, output: PathBuf) -> Result<()> {
+fn build() -> Result<()> {
     let config: Config = toml::from_str(&read_to_string(PathBuf::from(RIGAL_TOML))
         .context("Could not open `rigal.toml'.")?)
         .context("`rigal.toml' format seems broken.")?;
@@ -81,7 +80,7 @@ fn build(input: PathBuf, output: PathBuf) -> Result<()> {
             .next()
             .ok_or(anyhow!("Cannot process current directory"))?;
 
-        let path = output
+        let path = config.output
             .clone()
             .join(entry.path().strip_prefix(prefix)?);
 
@@ -98,7 +97,7 @@ fn build(input: PathBuf, output: PathBuf) -> Result<()> {
 
     // Find all images that are not directories, match a supported file extension and whose output
     // either does not exist or is older than the source.
-    let entries: Vec<_> = WalkDir::new(&input)
+    let entries: Vec<_> = WalkDir::new(&config.input)
         .follow_links(true)
         .into_iter()
         .filter_map(Result::ok)
@@ -150,8 +149,8 @@ fn main() -> Result<()> {
     let commands = Commands::from_args();
 
     match commands {
-        Commands::Build{ input, output } => {
-            build(input, output)?;
+        Commands::Build => {
+            build()?;
         }
         Commands::New => {
             create_config()?;
