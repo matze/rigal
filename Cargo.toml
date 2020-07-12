@@ -1,0 +1,15 @@
+[package]
+name = "rigal"
+version = "0.1.0"
+authors = ["Matthias Vogelgesang"]
+edition = "2018"
+
+[dependencies]
+anyhow = "1"
+image = "0"
+indicatif = "0"
+serde = "1"
+serde_derive = "1"
+structopt = "0.3"
+toml = "0.5"
+walkdir = "2"
