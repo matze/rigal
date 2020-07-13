@@ -75,8 +75,6 @@ fn resize_and_save(image: DynamicImage, width: u32, height: u32, path: PathBuf) 
 }
 
 async fn process(entry: Conversion, config: &Config, progress_bar: &ProgressBar) -> Result<()> {
-    progress_bar.set_message(&format!("Processing {:?}", entry.from.path()));
-
     let mut thumbnail_path = PathBuf::from(&entry.to);
     thumbnail_path.pop();
     thumbnail_path.push("thumbnails");
@@ -96,6 +94,7 @@ async fn process(entry: Conversion, config: &Config, progress_bar: &ProgressBar)
     }).await??;
 
     if let Some(resize_config) = &config.resize {
+        // User asks for resizing the source images, so lets do that.
         let width = resize_config.width;
         let height  = resize_config.height;
 
@@ -104,6 +103,7 @@ async fn process(entry: Conversion, config: &Config, progress_bar: &ProgressBar)
         }).await??;
     }
     else {
+        // No resizing required, just copy the source file.
         copy(entry.from.path(), &entry.to).await?;
     }
 
