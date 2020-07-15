@@ -9,6 +9,7 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::collections::HashSet;
 use structopt::StructOpt;
+use tera;
 use tokio::fs::{copy, create_dir_all, read_to_string, write};
 use tokio::task::spawn_blocking;
 use walkdir::{DirEntry, WalkDir};
@@ -49,6 +50,13 @@ struct Config {
 struct Conversion {
     from: DirEntry,
     to: PathBuf,
+}
+
+#[derive(Serialize)]
+struct Album {
+    title: String,
+    images: Vec<String>,
+    albums: Vec<String>,
 }
 
 async fn create_config() -> Result<()> {
@@ -148,8 +156,7 @@ async fn build() -> Result<()> {
         .follow_links(true)
         .into_iter()
         .filter_map(Result::ok)
-        .filter(|e| e.path().extension().map_or(false, |ext| extensions.contains(ext)))
-        .filter(|e| !e.file_type().is_dir())
+        .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
         .map(|e| into_conversion(e))
         .filter_map(Result::ok)
         .filter_map(|e| e)
@@ -163,6 +170,43 @@ async fn build() -> Result<()> {
 
     let futures: Vec<_> = entries.into_iter().map(|e| process(e, &config, &progress_bar)).collect();
     join_all(futures).await;
+
+    let templates = tera::Tera::new("_theme/templates/*.html")?;
+
+    for entry in WalkDir::new(&config.output) {
+        let entry = entry?;
+
+        if entry.file_type().is_dir() && entry.file_name() != "thumbnails" {
+            let children: Vec<_> = entry
+                .path()
+                .read_dir()?
+                .filter_map(Result::ok)
+                .collect();
+
+            let albums: Vec<_> = children
+                .iter()
+                .filter(|e| e.path().is_dir() && e.file_name() != "thumbnails")
+                .map(|e| format!("{}/", e.file_name().to_string_lossy()))
+                .collect();
+
+            let images: Vec<_> = children
+                .iter()
+                .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
+                .map(|e| format!("{}", e.file_name().to_string_lossy()))
+                .collect();
+
+            let mut context = tera::Context::new();
+
+            context.insert("album", &Album {
+                title: format!("{}", entry.file_name().to_string_lossy()),
+                albums: albums,
+                images: images,
+            });
+
+            let index_html = entry.path().join("index.html");
+            write(index_html, templates.render("index.html", &context)?).await?;
+        }
+    }
 
     Ok(())
 }
