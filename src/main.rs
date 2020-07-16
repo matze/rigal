@@ -53,9 +53,15 @@ struct Conversion {
 }
 
 #[derive(Serialize)]
+struct Image {
+    image: PathBuf,
+    thumbnail: PathBuf,
+}
+
+#[derive(Serialize)]
 struct Album {
     title: String,
-    images: Vec<String>,
+    images: Vec<Image>,
     albums: Vec<String>,
 }
 
@@ -192,7 +198,10 @@ async fn build() -> Result<()> {
             let images: Vec<_> = children
                 .iter()
                 .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
-                .map(|e| format!("{}", e.file_name().to_string_lossy()))
+                .map(|e| Image {
+                    image: e.path(),
+                    thumbnail: e.path().parent().unwrap().join("thumbnail").join(e.path().file_name().unwrap())
+                })
                 .collect();
 
             let mut context = tera::Context::new();
