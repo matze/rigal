@@ -155,6 +155,26 @@ async fn copy_static_data(config: &Config) -> Result<()> {
     Ok(())
 }
 
+fn into_conversion(entry: DirEntry, config: &Config) -> Result<Option<Conversion>> {
+    let prefix = entry
+        .path()
+        .iter()
+        .next()
+        .ok_or(anyhow!("Cannot process current directory"))?;
+
+    let path = config.output.join(entry.path().strip_prefix(prefix)?);
+
+    if !path.exists() {
+        return Ok(Some(Conversion { from: entry, to: path }))
+    }
+
+    if entry.metadata()?.modified()? > path.metadata()?.modified()? {
+        return Ok(Some(Conversion { from: entry, to: path }))
+    }
+
+    Ok(None)
+}
+
 async fn build() -> Result<()> {
     let config: Config = toml::from_str(&read_to_string(PathBuf::from(RIGAL_TOML)).await
         .context("Could not open `rigal.toml'.")?)
@@ -163,28 +183,6 @@ async fn build() -> Result<()> {
     let mut extensions = HashSet::new();
     extensions.insert(OsStr::new("jpg"));
 
-    let into_conversion = |entry: DirEntry| -> Result<Option<Conversion>> {
-        let prefix = entry
-            .path()
-            .iter()
-            .next()
-            .ok_or(anyhow!("Cannot process current directory"))?;
-
-        let path = config.output
-            .clone()
-            .join(entry.path().strip_prefix(prefix)?);
-
-        if !path.exists() {
-            return Ok(Some(Conversion { from: entry, to: path }))
-        }
-
-        if entry.metadata()?.modified()? > path.metadata()?.modified()? {
-            return Ok(Some(Conversion { from: entry, to: path }))
-        }
-
-        Ok(None)
-    };
-
     // Find all images that are not directories, match a supported file extension and whose output
     // either does not exist or is older than the source.
     let entries: Vec<_> = WalkDir::new(&config.input)
@@ -192,7 +190,7 @@ async fn build() -> Result<()> {
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
-        .map(|e| into_conversion(e))
+        .map(|e| into_conversion(e, &config))
         .filter_map(Result::ok)
         .filter_map(|e| e)
         .collect();
