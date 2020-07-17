@@ -3,6 +3,7 @@ name = "rigal"
 version = "0.1.0"
 authors = ["Matthias Vogelgesang"]
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 anyhow = "1"
