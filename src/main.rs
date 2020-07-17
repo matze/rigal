@@ -52,10 +52,10 @@ struct Conversion {
     to: PathBuf,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct Image {
-    image: PathBuf,
-    thumbnail: PathBuf,
+    image: String,
+    thumbnail: String,
 }
 
 #[derive(Serialize)]
@@ -192,15 +192,15 @@ async fn build() -> Result<()> {
             let albums: Vec<_> = children
                 .iter()
                 .filter(|e| e.path().is_dir() && e.file_name() != "thumbnails")
-                .map(|e| format!("{}/", e.file_name().to_string_lossy()))
+                .map(|e| format!("{}/", e.path().strip_prefix(&config.output).unwrap().file_name().unwrap().to_string_lossy()))
                 .collect();
 
             let images: Vec<_> = children
                 .iter()
                 .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
                 .map(|e| Image {
-                    image: e.path(),
-                    thumbnail: e.path().parent().unwrap().join("thumbnail").join(e.path().file_name().unwrap())
+                    image: e.path().file_name().unwrap().to_string_lossy().to_string(),
+                    thumbnail: PathBuf::from("thumbnails").join(e.path().file_name().unwrap()).to_string_lossy().to_string(),
                 })
                 .collect();
 
