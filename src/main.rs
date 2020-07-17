@@ -126,6 +126,35 @@ async fn process(entry: Conversion, config: &Config, progress_bar: &ProgressBar)
     Ok(())
 }
 
+async fn copy_static_data(config: &Config) -> Result<()> {
+    let src_root = PathBuf::from("_theme").join("static");
+
+    if !src_root.is_dir() {
+        return Ok(());
+    }
+
+    let dst_root = PathBuf::from(&config.output).join("static");
+
+    for entry in WalkDir::new(&src_root) {
+        let entry = entry?;
+        let entry = entry.path();
+        let dst = dst_root.join(entry.strip_prefix(&src_root)?);
+
+        if entry.is_dir() {
+            if !dst.exists() {
+                create_dir_all(&dst).await?;
+            }
+        }
+        else {
+            if !dst.exists() || dst.metadata()?.modified()? < entry.metadata()?.modified()? {
+                copy(entry, dst).await?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
 async fn build() -> Result<()> {
     let config: Config = toml::from_str(&read_to_string(PathBuf::from(RIGAL_TOML)).await
         .context("Could not open `rigal.toml'.")?)
@@ -176,6 +205,8 @@ async fn build() -> Result<()> {
 
     let futures: Vec<_> = entries.into_iter().map(|e| process(e, &config, &progress_bar)).collect();
     join_all(futures).await;
+
+    copy_static_data(&config).await?;
 
     let templates = tera::Tera::new("_theme/templates/*.html")?;
 
