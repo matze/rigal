@@ -175,6 +175,41 @@ fn into_conversion(entry: DirEntry, config: &Config) -> Result<Option<Conversion
     Ok(None)
 }
 
+async fn write_template(entry: &DirEntry, config: &Config, templates: &tera::Tera, extensions: &HashSet<&OsStr>) -> Result<()> {
+    let children: Vec<_> = entry
+        .path()
+        .read_dir()?
+        .filter_map(Result::ok)
+        .collect();
+
+    let albums: Vec<_> = children
+        .iter()
+        .filter(|e| e.path().is_dir() && e.file_name() != "thumbnails")
+        .map(|e| format!("{}/", e.path().strip_prefix(&config.output).unwrap().file_name().unwrap().to_string_lossy()))
+        .collect();
+
+    let images: Vec<_> = children
+        .iter()
+        .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
+        .map(|e| Image {
+            image: e.path().file_name().unwrap().to_string_lossy().to_string(),
+            thumbnail: PathBuf::from("thumbnails").join(e.path().file_name().unwrap()).to_string_lossy().to_string(),
+        })
+        .collect();
+
+    let mut context = tera::Context::new();
+
+    context.insert("album", &Album {
+        title: format!("{}", entry.file_name().to_string_lossy()),
+        albums: albums,
+        images: images,
+    });
+
+    let index_html = entry.path().join("index.html");
+    write(index_html, templates.render("index.html", &context)?).await?;
+    Ok(())
+}
+
 async fn build() -> Result<()> {
     let config: Config = toml::from_str(&read_to_string(PathBuf::from(RIGAL_TOML)).await
         .context("Could not open `rigal.toml'.")?)
@@ -212,37 +247,7 @@ async fn build() -> Result<()> {
         let entry = entry?;
 
         if entry.file_type().is_dir() && entry.file_name() != "thumbnails" {
-            let children: Vec<_> = entry
-                .path()
-                .read_dir()?
-                .filter_map(Result::ok)
-                .collect();
-
-            let albums: Vec<_> = children
-                .iter()
-                .filter(|e| e.path().is_dir() && e.file_name() != "thumbnails")
-                .map(|e| format!("{}/", e.path().strip_prefix(&config.output).unwrap().file_name().unwrap().to_string_lossy()))
-                .collect();
-
-            let images: Vec<_> = children
-                .iter()
-                .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
-                .map(|e| Image {
-                    image: e.path().file_name().unwrap().to_string_lossy().to_string(),
-                    thumbnail: PathBuf::from("thumbnails").join(e.path().file_name().unwrap()).to_string_lossy().to_string(),
-                })
-                .collect();
-
-            let mut context = tera::Context::new();
-
-            context.insert("album", &Album {
-                title: format!("{}", entry.file_name().to_string_lossy()),
-                albums: albums,
-                images: images,
-            });
-
-            let index_html = entry.path().join("index.html");
-            write(index_html, templates.render("index.html", &context)?).await?;
+            write_template(&entry, &config, &templates, &extensions).await?;
         }
     }
 
