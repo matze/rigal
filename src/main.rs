@@ -5,7 +5,7 @@ use image::io::Reader;
 use image::imageops::{resize, FilterType};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde_derive::{Deserialize, Serialize};
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::path::PathBuf;
 use std::collections::HashSet;
 use structopt::StructOpt;
@@ -67,6 +67,7 @@ struct Album {
 
 struct Builder {
     config: Config,
+    extensions: HashSet<OsString>,
     templates: tera::Tera,
 }
 
@@ -82,8 +83,14 @@ impl Builder {
             .context("Could not open `rigal.toml'.")?)
             .context("`rigal.toml' format seems broken.")?;
 
+        let mut extensions: HashSet<OsString> = HashSet::new();
+        let mut ext = OsString::new();
+        ext.push("jpg");
+        extensions.insert(ext);
+
         Ok(Builder {
             config: config,
+            extensions: extensions,
             templates: tera::Tera::new("_theme/templates/*.html")?,
         })
     }
@@ -147,16 +154,13 @@ impl Builder {
     }
 
     async fn process_images(&self) -> Result<()> {
-        let mut extensions = HashSet::new();
-        extensions.insert(OsStr::new("jpg"));
-
         // Find all images that are not directories, match a supported file extension and whose output
         // either does not exist or is older than the source.
         let entries: Vec<_> = WalkDir::new(&self.config.input)
             .follow_links(true)
             .into_iter()
             .filter_map(Result::ok)
-            .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
+            .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| self.extensions.contains(ext)))
             .map(|e| self.into_conversion(e))
             .filter_map(Result::ok)
             .filter_map(|e| e)
@@ -203,7 +207,7 @@ impl Builder {
         Ok(())
     }
 
-    async fn write_template(&self, entry: &DirEntry, extensions: &HashSet<&OsStr>) -> Result<()> {
+    async fn write_template(&self, entry: &DirEntry) -> Result<()> {
         let children: Vec<_> = entry
             .path()
             .read_dir()?
@@ -218,7 +222,7 @@ impl Builder {
 
         let images: Vec<_> = children
             .iter()
-            .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| extensions.contains(ext)))
+            .filter(|e| e.path().is_file() && e.path().extension().map_or(false, |ext| self.extensions.contains(ext)))
             .map(|e| Image {
                 image: e.path().file_name().unwrap().to_string_lossy().to_string(),
                 thumbnail: PathBuf::from("thumbnails").join(e.path().file_name().unwrap()).to_string_lossy().to_string(),
@@ -239,14 +243,11 @@ impl Builder {
     }
 
     async fn write_templates(&self) -> Result<()> {
-        let mut extensions = HashSet::new();
-        extensions.insert(OsStr::new("jpg"));
-
         for entry in WalkDir::new(&self.config.output) {
             let entry = entry?;
 
             if entry.file_type().is_dir() && entry.file_name() != "thumbnails" {
-                self.write_template(&entry, &extensions).await?;
+                self.write_template(&entry).await?;
             }
         }
 
