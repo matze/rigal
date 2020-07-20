@@ -172,7 +172,11 @@ impl Builder {
                 "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {msg}",
         ));
 
-        let futures: Vec<_> = entries.into_iter().map(|e| self.process_image(e, &progress_bar)).collect();
+        let futures: Vec<_> = entries
+            .into_iter()
+            .map(|e| self.process_image(e, &progress_bar))
+            .collect();
+
         join_all(futures).await;
 
         Ok(())
