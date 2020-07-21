@@ -65,10 +65,16 @@ struct Album {
     albums: Vec<String>,
 }
 
+#[derive(Serialize)]
+struct Theme {
+    url: String,
+}
+
 struct Builder {
     config: Config,
     extensions: HashSet<OsString>,
     templates: tera::Tera,
+    theme: Theme,
 }
 
 fn resize_and_save(image: DynamicImage, width: u32, height: u32, path: PathBuf) -> Result<DynamicImage> {
@@ -88,10 +94,19 @@ impl Builder {
         ext.push("jpg");
         extensions.insert(ext);
 
+        let mut templates = tera::Tera::new("_theme/templates/*.html")?;
+
+        // We disable autoescape because we will dump a lot of path-like strings which will have to
+        // be marked as "safe" by the user.
+        templates.autoescape_on(vec![]);
+
         Ok(Builder {
             config: config,
             extensions: extensions,
-            templates: tera::Tera::new("_theme/templates/*.html")?,
+            templates: templates,
+            theme: Theme {
+                url: "_static".to_string(),
+            },
         })
     }
 
@@ -240,6 +255,8 @@ impl Builder {
             albums: albums,
             images: images,
         });
+
+        context.insert("theme", &self.theme);
 
         let index_html = entry.path().join("index.html");
         write(index_html, self.templates.render("index.html", &context)?).await?;
