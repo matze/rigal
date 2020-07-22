@@ -61,6 +61,7 @@ struct Image {
 #[derive(Serialize)]
 struct Album {
     title: String,
+    thumbnail: Option<String>,
     images: Vec<Image>,
     albums: Vec<String>,
 }
@@ -253,6 +254,7 @@ impl Builder {
         context.insert("album", &Album {
             title: format!("{}", entry.file_name().to_string_lossy()),
             albums: albums,
+            thumbnail: images.get(0).map_or(None, |image| Some(image.thumbnail.clone())),
             images: images,
         });
 
