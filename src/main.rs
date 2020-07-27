@@ -75,7 +75,6 @@ struct Builder {
     config: Config,
     extensions: HashSet<OsString>,
     templates: tera::Tera,
-    theme: Theme,
 }
 
 fn resize_and_save(image: DynamicImage, width: u32, height: u32, path: PathBuf) -> Result<DynamicImage> {
@@ -105,9 +104,6 @@ impl Builder {
             config: config,
             extensions: extensions,
             templates: templates,
-            theme: Theme {
-                url: "_static".to_string(),
-            },
         })
     }
 
@@ -249,6 +245,18 @@ impl Builder {
             })
             .collect();
 
+        let mut static_path = PathBuf::new();
+
+        for _ in 0..entry.path().iter().count() - 1 {
+            static_path.push("..");
+        }
+
+        static_path.push("static");
+
+        let theme = Theme {
+            url: format!("{}", static_path.to_string_lossy()),
+        };
+
         let mut context = tera::Context::new();
 
         context.insert("album", &Album {
@@ -258,7 +266,7 @@ impl Builder {
             images: images,
         });
 
-        context.insert("theme", &self.theme);
+        context.insert("theme", &theme);
 
         let index_html = entry.path().join("index.html");
         write(index_html, self.templates.render("index.html", &context)?).await?;
