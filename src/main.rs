@@ -266,12 +266,17 @@ impl Builder {
     }
 
     async fn write_templates(&self) -> Result<()> {
-        for entry in WalkDir::new(&self.config.output) {
+        fn must_skip(entry: &DirEntry) -> bool {
+            entry.file_type().is_file() ||
+                (entry.file_type().is_dir() && (entry.file_name() == "thumbnails" || entry.file_name() == "static"))
+        }
+
+        for entry in WalkDir::new(&self.config.output)
+            .into_iter()
+            .filter_entry(|e| !must_skip(e)) {
             let entry = entry?;
 
-            if entry.file_type().is_dir() && entry.file_name() != "thumbnails" {
-                self.write_template(&entry).await?;
-            }
+            self.write_template(&entry).await?;
         }
 
         Ok(())
