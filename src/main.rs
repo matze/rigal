@@ -83,6 +83,17 @@ fn resize_and_save(image: DynamicImage, width: u32, height: u32, path: PathBuf) 
     Ok(image)
 }
 
+fn path_to_static_data(entry: &DirEntry) -> PathBuf {
+    let mut path = PathBuf::new();
+
+    for _ in 0..entry.path().iter().count() - 1 {
+        path.push("..");
+    }
+
+    path.push("static");
+    path
+}
+
 impl Builder {
     async fn new() -> Result<Self> {
         let config: Config = toml::from_str(&read_to_string(PathBuf::from(RIGAL_TOML)).await
@@ -245,16 +256,8 @@ impl Builder {
             })
             .collect();
 
-        let mut static_path = PathBuf::new();
-
-        for _ in 0..entry.path().iter().count() - 1 {
-            static_path.push("..");
-        }
-
-        static_path.push("static");
-
         let theme = Theme {
-            url: format!("{}", static_path.to_string_lossy()),
+            url: format!("{}", path_to_static_data(&entry).to_string_lossy()),
         };
 
         let mut context = tera::Context::new();
